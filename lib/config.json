@@ -1,0 +1,11 @@
+{
+  "COMMUNICATION_CHANNEL": {
+    "NETWORK": "unix",
+    "ADDRES": "/tmp/lsmgounix"
+  },
+  "FILES_LOCATION": {
+    "DB_ROOT_PATH": "database/",
+    "LOGS_DIR_PATH": "database/logs/",
+    "LOGS_REQUESTS_FILE_NAME": "lsmgo_requests_logs"
+  }
+}
