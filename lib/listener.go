@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"lsmgo/storage"
 	"net"
 	"os"
 	"os/signal"
@@ -83,7 +84,7 @@ func initializeEnvironment() {
 
 func handleConnect(conn net.Conn, logsFile os.File, wg *sync.WaitGroup, done chan struct{}) {
 	go func() {
-		<- done
+		<-done
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	}()
 
@@ -93,29 +94,31 @@ func handleConnect(conn net.Conn, logsFile os.File, wg *sync.WaitGroup, done cha
 
 		var err error
 
-		input := make([]byte, 1024 * 4)
+		input := make([]byte, 1024*4)
 
 		var inputLength int
 
 		if inputLength, err = conn.Read(input); err != nil {
 			fmt.Println(err)
-			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err !=nil {
+			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
 				fmt.Println(err)
 			}
 		}
 
+		res := disassembleCommand(string(input[0:inputLength]))
 		if _, err = logsFile.WriteString(GetTime(time.Now()) + " User query: " + string(input[0:inputLength]) + "\n"); err != nil {
 			fmt.Println(err)
-			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err !=nil {
+			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
 				fmt.Println(err)
 			}
 		}
 
 		message := "---------\n" // отправляемое сообщение
+		message += res + "\n"
 
 		if _, err = conn.Write([]byte(message)); err != nil {
 			fmt.Println(err)
-			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err !=nil {
+			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
 				fmt.Println(err)
 			}
 		}
@@ -133,7 +136,7 @@ func handleSIGINT(channel chan os.Signal, logsFile os.File, wg *sync.WaitGroup, 
 
 	if _, err = logsFile.WriteString(GetTime(time.Now()) + " Shutdown: SIGINT\n"); err != nil {
 		fmt.Println(err)
-		if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err !=nil {
+		if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
 			fmt.Println(err)
 		}
 	}
@@ -142,6 +145,62 @@ func handleSIGINT(channel chan os.Signal, logsFile os.File, wg *sync.WaitGroup, 
 	os.Exit(0)
 }
 
-func disassembleCommand(command string) {
+func disassembleCommand(command string) string {
 	command = StandardizeSpaces(strings.Trim(command, " "))
+	commands := strings.Split(command, " ")
+
+	switch strings.ToLower(commands[0]) {
+	case "select":
+		return disassembleSelectCommand(commands)
+	case "insert":
+		return disassembleInsertCommand(commands)
+	case "update":
+		return disassembleUpdateCommand(commands)
+	case "delete":
+		return disassembleDeleteCommand(commands)
+	default:
+		return "wrong command"
+	}
+}
+
+func disassembleSelectCommand(commands []string) string {
+	var res string
+	if len(commands) == 2 {
+		res = storage.Storage.FindByKey(commands[1])
+	} else if len(commands) == 3 {
+		if strings.ToLower(commands[2]) != "value" {
+			return "Wrong select command"
+		}
+		res = storage.Storage.FindByValue(commands[1], false)
+	} else if len(commands) == 4 {
+		if strings.ToLower(commands[2]) != "like" && strings.ToLower(commands[3]) != "value" {
+			return "Wrong select command"
+		}
+		res = storage.Storage.FindByValue(commands[1], true)
+	} else {
+		return "Wrong select command"
+	}
+	return res
+}
+
+func disassembleInsertCommand(commands []string) string {
+	if len(commands) != 4 || strings.ToLower(commands[2]) != "value" {
+		return "Wrong insert command"
+	}
+	storage.Storage.Insert(commands[1], commands[3])
+	return "Inserted!"
+}
+
+func disassembleUpdateCommand(commands []string) string {
+	if len(commands) != 4 || strings.ToLower(commands[2]) != "value" {
+		return "Wrong update command"
+	}
+	return storage.Storage.Update(commands[1], commands[3])
+}
+
+func disassembleDeleteCommand(commands []string) string {
+	if len(commands) != 2 {
+		return "Wrong update command"
+	}
+	return storage.Storage.Update(commands[1], "/_lsmgo_deleted/")
 }
