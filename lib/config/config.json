@@ -6,6 +6,7 @@
   "FILES_LOCATION": {
     "DB_ROOT_PATH": "database/",
     "LOGS_DIR_PATH": "database/logs/",
-    "LOGS_REQUESTS_FILE_NAME": "lsmgo_requests_logs"
+    "LOGS_REQUESTS_FILE_NAME": "lsmgo_requests_logs",
+    "SSTABLES_PATH": "database/sstables/"
   }
 }

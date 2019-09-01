@@ -1,4 +1,4 @@
-package lib
+package config
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 
 type ConfigStruct struct {
 	COMMUNICATION_CHANNEL CommunicationChannel
-	FILES_LOCATION FilesLocation
+	FILES_LOCATION        FilesLocation
 }
 
 type (
@@ -17,23 +17,27 @@ type (
 		ADDRES  string
 	}
 	FilesLocation struct {
-		DB_ROOT_PATH       string
-		LOGS_DIR_PATH      string
+		DB_ROOT_PATH            string
+		LOGS_DIR_PATH           string
 		LOGS_REQUESTS_FILE_NAME string
+		SSTABLES_PATH           string
 	}
 )
 
-func GetApplicationConfig() ConfigStruct{
+var ApplicationConfig ConfigStruct = getApplicationConfig()
+
+func getApplicationConfig() ConfigStruct {
 	var err error
-	file, err := os.Open("./lib/config.json")
+	//fmt.Println(os.C)
+	file, err := os.Open("./lib/config/config.json")
 
 	if err != nil {
 		fmt.Println("Err: ", err)
 		fmt.Println("Will use default config")
 
 		config := ConfigStruct{
-			COMMUNICATION_CHANNEL:CommunicationChannel{"unix", "/tmp/lsmgounix"},
-			FILES_LOCATION:FilesLocation{"database/", "database/logs/", "lsmgo_requests_logs"},
+			COMMUNICATION_CHANNEL: CommunicationChannel{"unix", "/tmp/lsmgounix"},
+			FILES_LOCATION:        FilesLocation{"database/", "database/logs/", "lsmgo_requests_logs", "database/sstables/"},
 		}
 		return config
 	}

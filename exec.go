@@ -3,13 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"lsmgo/lib"
+	"lsmgo/lib/config"
 	"net"
 	"os"
 	"strings"
 )
 
-var CONFIG = lib.GetApplicationConfig()
+var CONFIG = config.ApplicationConfig
 
 func main() {
 	for {
@@ -24,22 +24,22 @@ func main() {
 
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			request = strings.Trim(request + " " + scanner.Text(), " ")
+			request = strings.Trim(request+" "+scanner.Text(), " ")
 
 			if len(request) == 0 || request == ";" {
 				request = ""
 				fmt.Print("db=#")
-			} else if request == "exit"{
+			} else if request == "exit" {
 				return
-			} else if string(request[len(request) - 1:]) == ";" {
-				_, err = conn.Write([]byte(string(request[:len(request) - 1])))
+			} else if string(request[len(request)-1:]) == ";" {
+				_, err = conn.Write([]byte(string(request[:len(request)-1])))
 
 				if err != nil {
 					fmt.Println(err)
 					return
 				}
 
-				input := make([]byte, 1024 * 4)
+				input := make([]byte, 1024*4)
 				n, err := conn.Read(input)
 
 				if err != nil {

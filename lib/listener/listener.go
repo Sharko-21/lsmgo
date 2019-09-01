@@ -1,7 +1,10 @@
-package lib
+package listener
 
 import (
 	"fmt"
+	"lsmgo/lib"
+	"lsmgo/lib/config"
+	"lsmgo/lib/logs"
 	"lsmgo/storage"
 	"net"
 	"os"
@@ -12,7 +15,7 @@ import (
 	"time"
 )
 
-var CONFIG = GetApplicationConfig()
+var CONFIG = config.ApplicationConfig
 
 func ListenClient() {
 	initializeEnvironment()
@@ -21,14 +24,13 @@ func ListenClient() {
 	wg := &sync.WaitGroup{}
 	doneConnections := make(chan struct{})
 
-	logsFile := OpenFile(CONFIG.FILES_LOCATION.LOGS_DIR_PATH + CONFIG.FILES_LOCATION.LOGS_REQUESTS_FILE_NAME)
-	if _, err := logsFile.WriteString(GetTime(time.Now()) + " Started...\n"); err != nil {
+	if err := logs.Logger.Write("Started...\n"); err != nil {
 		fmt.Println(err)
 	}
 
 	channel := make(chan os.Signal, 1)
 	signal.Notify(channel, syscall.SIGINT)
-	go handleSIGINT(channel, *logsFile, wg, doneConnections, &isConnectionsCanOpen)
+	go handleSIGINT(channel, wg, doneConnections, &isConnectionsCanOpen)
 
 	if err := os.Remove(CONFIG.COMMUNICATION_CHANNEL.ADDRES); err != nil {
 		fmt.Println(err)
@@ -37,8 +39,7 @@ func ListenClient() {
 	listener, err := net.Listen(CONFIG.COMMUNICATION_CHANNEL.NETWORK, CONFIG.COMMUNICATION_CHANNEL.ADDRES)
 	if err != nil {
 		fmt.Println(err)
-
-		if _, err := logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
+		if err = logs.Logger.Write(err.Error() + "\n"); err != nil {
 			fmt.Println(err)
 		}
 
@@ -47,7 +48,6 @@ func ListenClient() {
 
 	defer os.Remove(CONFIG.COMMUNICATION_CHANNEL.ADDRES)
 	defer listener.Close()
-	defer logsFile.Close()
 
 	fmt.Println("Server is listening...")
 
@@ -64,25 +64,30 @@ func ListenClient() {
 		}
 
 		wg.Add(1)
-		go handleConnect(conn, *logsFile, wg, doneConnections)
+		go handleConnect(conn, wg, doneConnections)
 	}
 	wg.Wait()
 }
 
 func initializeEnvironment() {
-	if IsExists(CONFIG.FILES_LOCATION.DB_ROOT_PATH) == false {
+	if lib.IsExists(CONFIG.FILES_LOCATION.DB_ROOT_PATH) == false {
 		_ = os.Mkdir(CONFIG.FILES_LOCATION.DB_ROOT_PATH, 0777)
 	}
-	if IsExists(CONFIG.FILES_LOCATION.LOGS_DIR_PATH) == false {
+	if lib.IsExists(CONFIG.FILES_LOCATION.LOGS_DIR_PATH) == false {
 		_ = os.Mkdir(CONFIG.FILES_LOCATION.LOGS_DIR_PATH, 0777)
 	}
-	if !IsExists(CONFIG.FILES_LOCATION.LOGS_DIR_PATH + CONFIG.FILES_LOCATION.LOGS_REQUESTS_FILE_NAME) {
+	if !lib.IsExists(CONFIG.FILES_LOCATION.LOGS_DIR_PATH + CONFIG.FILES_LOCATION.LOGS_REQUESTS_FILE_NAME) {
 		file, _ := os.Create(CONFIG.FILES_LOCATION.LOGS_DIR_PATH + CONFIG.FILES_LOCATION.LOGS_REQUESTS_FILE_NAME)
 		file.Close()
 	}
+	if lib.IsExists(CONFIG.FILES_LOCATION.SSTABLES_PATH) == false {
+		_ = os.Mkdir(CONFIG.FILES_LOCATION.SSTABLES_PATH, 0777)
+		_ = os.Mkdir(CONFIG.FILES_LOCATION.SSTABLES_PATH+"/data/", 0777)
+		_ = os.Mkdir(CONFIG.FILES_LOCATION.SSTABLES_PATH+"/indexes/", 0777)
+	}
 }
 
-func handleConnect(conn net.Conn, logsFile os.File, wg *sync.WaitGroup, done chan struct{}) {
+func handleConnect(conn net.Conn, wg *sync.WaitGroup, done chan struct{}) {
 	go func() {
 		<-done
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -100,17 +105,14 @@ func handleConnect(conn net.Conn, logsFile os.File, wg *sync.WaitGroup, done cha
 
 		if inputLength, err = conn.Read(input); err != nil {
 			fmt.Println(err)
-			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
+			if err = logs.Logger.Write(err.Error() + "\n"); err != nil {
 				fmt.Println(err)
 			}
 		}
 
 		res := disassembleCommand(string(input[0:inputLength]))
-		if _, err = logsFile.WriteString(GetTime(time.Now()) + " User query: " + string(input[0:inputLength]) + "\n"); err != nil {
+		if err = logs.Logger.Write(" User query: " + string(input[0:inputLength]) + "\n"); err != nil {
 			fmt.Println(err)
-			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
-				fmt.Println(err)
-			}
 		}
 
 		message := "---------\n" // отправляемое сообщение
@@ -118,14 +120,14 @@ func handleConnect(conn net.Conn, logsFile os.File, wg *sync.WaitGroup, done cha
 
 		if _, err = conn.Write([]byte(message)); err != nil {
 			fmt.Println(err)
-			if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
+			if err = logs.Logger.Write(err.Error() + "\n"); err != nil {
 				fmt.Println(err)
 			}
 		}
 	}()
 }
 
-func handleSIGINT(channel chan os.Signal, logsFile os.File, wg *sync.WaitGroup, doneConnections chan struct{}, isConnectionCanOpen *bool) {
+func handleSIGINT(channel chan os.Signal, wg *sync.WaitGroup, doneConnections chan struct{}, isConnectionCanOpen *bool) {
 	<-channel
 	var err error
 
@@ -134,19 +136,17 @@ func handleSIGINT(channel chan os.Signal, logsFile os.File, wg *sync.WaitGroup, 
 	close(doneConnections)
 	wg.Wait()
 
-	if _, err = logsFile.WriteString(GetTime(time.Now()) + " Shutdown: SIGINT\n"); err != nil {
+	if err = logs.Logger.Write(" Shutdown: SIGINT\n"); err != nil {
 		fmt.Println(err)
-		if _, err = logsFile.WriteString(GetTime(time.Now()) + " " + err.Error() + "\n"); err != nil {
-			fmt.Println(err)
-		}
 	}
 
-	logsFile.Close()
+	storage.Storage.Shutdown()
+
 	os.Exit(0)
 }
 
 func disassembleCommand(command string) string {
-	command = StandardizeSpaces(strings.Trim(command, " "))
+	command = lib.StandardizeSpaces(strings.Trim(command, " "))
 	commands := strings.Split(command, " ")
 
 	switch strings.ToLower(commands[0]) {
